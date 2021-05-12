@@ -9,13 +9,18 @@ inline void el_init(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elva
 	elFluid.rest_compressionRate_all().setOnes();
 	elBound.rest_compressionRate_all().setOnes();
 
-	elFluid.rest_density_all().setConstant(1000);
+	//elFluid.rest_density_all().setConstant(1000);
 	elBound.rest_density_all().setConstant(1000);
 
-	elFluid.vel_all().colwise() = Array3_f(0, -3, 0);
+	elFluid.vel_all().setZero();
+	elBound.vel_all().setZero();
+	elFluid.adv_vel_all().colwise() = Array3_f(0, 0, 0);
+	cout << " elFluid.numPart " << elFluid.numPart << endl;
 }
 
 inline void el_updateBoundWeight(Elbound& elBound, Elneighb& elNeighb) {
+	//val_f maxWeight = 1.4;
+	//val_f minWeight = 1;
 
 	// [Step 1] clean memnory (left in previous time step) before new summation
 	elBound.weight_all().setZero();
@@ -32,8 +37,9 @@ inline void el_updateBoundWeight(Elbound& elBound, Elneighb& elNeighb) {
 			}
 		}
 		elBound.weight(i) *= restVolume;
-		elBound.weight(i) = 0.7 / elBound.weight(i); // Eqn.12 of Pressure Boundaries 
-		
+		elBound.weight(i) = 0.7 / elBound.weight(i);
+		//if (elBound.weight(i) > maxWeight) { elBound.weight(i) = maxWeight; }
+		//else if (elBound.weight(i) < minWeight) { elBound.weight(i) = minWeight; }
 		elBound.rest_volume(i) = elBound.weight(i) * restVolume;
 	}
 }
@@ -63,18 +69,40 @@ inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb&
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elFluid.sph_Psi(i) += elFluid.X(neighbs.uid[n]) * neighbs.W[n];
-				elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elFluid.X(neighbs.uid[n]);
-				elFluid.alpha_term2(i) += pow(elFluid.X(neighbs.uid[n]), 2) * pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]);
+				if (useNumberDensity) {
+					elFluid.sph_Psi(i) += elFluid.X(i) * neighbs.W[n];///q:use everywhere? (f-f, f-b, b-f, b-b?)
+					elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elFluid.X(neighbs.uid[n]);
+					elFluid.alpha_term2(i) += elFluid.X(i) * elFluid.X(neighbs.uid[n]) * pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]);
+				}
+				else {
+					elFluid.sph_Psi(i) += elFluid.X(neighbs.uid[n]) * neighbs.W[n];
+					elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elFluid.X(neighbs.uid[n]);
+					elFluid.alpha_term2(i) += pow(elFluid.X(neighbs.uid[n]), 2) * pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]);
+				}
 			}
 			else {
 				elFluid.sph_Psi(i) += elBound.weight(bid(neighbs.uid[n])) * elFluid.X(i) * neighbs.W[n];
-				elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elBound.weight(bid(neighbs.uid[n])) * elFluid.X(i);
+				if (useNumberDensity) {
+					elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elBound.weight(bid(neighbs.uid[n])) * elFluid.X(i);
+				}
+				else {
+					elFluid.alpha_term1(i) += neighbs.grad_W_vec[n] * elBound.weight(bid(neighbs.uid[n])) * elFluid.X(i);
+				}
 			}
 		}
 		elFluid.sph_volume(i) = elFluid.X(i) / elFluid.sph_Psi(i);
-		elFluid.alpha(i) = (elFluid.alpha_term1(i).transpose().matrix() *
-			elFluid.alpha_term1(i).matrix())(0, 0) / elFluid.mass(i) + elFluid.alpha_term2(i);
+		if (useNumberDensity) {
+			elFluid.alpha(i) = 0;
+			for (val_i n = 0; n < neighbs.neighbNum; n++) {
+				elFluid.alpha(i) += (elFluid.alpha_term1(i).transpose().matrix() *
+					neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(i);
+			}
+			elFluid.alpha(i) = elFluid.alpha(i) / elFluid.mass(i) + elFluid.alpha_term2(i);
+		}
+		else {
+			elFluid.alpha(i) = (elFluid.alpha_term1(i).transpose().matrix() *
+				elFluid.alpha_term1(i).matrix())(0, 0) / elFluid.mass(i) + elFluid.alpha_term2(i);
+		}
 		if (elFluid.alpha(i) < 10e-6) { elFluid.alpha(i) = 10e-6; }
 	}
 #pragma omp parallel for
@@ -83,11 +111,30 @@ inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb&
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elBound.sph_Psi(i) += elFluid.X(neighbs.uid[n]) * neighbs.W[n];
-				elBound.alpha_term2(i) += pow(elFluid.X(neighbs.uid[n]), 2) * pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]); // Number Density
+				if (useNumberDensity) {
+					elBound.sph_Psi(i) += elBound.X(i) / elBound.weight(i) * neighbs.W[n]; 
+					elBound.alpha_term2(i) += elBound.X(i) / elBound.weight(i) 
+						* elFluid.X(neighbs.uid[n]) * pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]); 
+					//elBound.sph_Psi(i) += elBound.X(i) * neighbs.W[n];///q4
+					//elBound.alpha_term2(i) += elBound.X(i) * elFluid.X(neighbs.uid[n]) 
+						//* pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]);
+
+				}
+				else {
+					elBound.sph_Psi(i) += elFluid.X(neighbs.uid[n]) * neighbs.W[n];
+					elBound.alpha_term2(i) += pow(elFluid.X(neighbs.uid[n]), 2) 
+						* pow(neighbs.grad_W[n], 2) / elFluid.mass(neighbs.uid[n]); 
+				}
 			}
 			else {
-				elBound.sph_Psi(i) += elBound.X(bid(neighbs.uid[n])) * neighbs.W[n];
+				//if (useNumberDensity) {
+				//	//elBound.sph_Psi(i) += elBound.X(i) * neighbs.W[n];
+				//	elBound.sph_Psi(i) += elBound.X(i) / elBound.weight(i) 
+				//		* elBound.weight(bid(neighbs.uid[n])) * neighbs.W[n];
+				//}
+				//else {
+					elBound.sph_Psi(i) += elBound.X(bid(neighbs.uid[n])) * neighbs.W[n];
+				//}
 			}
 		}
 		elBound.sph_volume(i) = elBound.X(i) / elBound.sph_Psi(i);
@@ -130,8 +177,14 @@ inline void el_loop_adv_Psi(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeig
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elFluid.adv_Psi(i) += ((elFluid.adv_vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
-					neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(neighbs.uid[n]);
+				if (useNumberDensity) {
+					elFluid.adv_Psi(i) += ((elFluid.adv_vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
+						neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(i);
+				}
+				else {
+					elFluid.adv_Psi(i) += ((elFluid.adv_vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
+						neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(neighbs.uid[n]);
+				}
 			}
 			else {
 				elFluid.adv_Psi(i) += ((elFluid.adv_vel(i) - elBound.vel(bid(neighbs.uid[n]))).transpose().matrix() *
@@ -149,12 +202,28 @@ inline void el_loop_adv_Psi(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeig
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elBound.adv_Psi(i) += ((elBound.vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
-					neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(neighbs.uid[n]); // Number Density
+				if (useNumberDensity) {
+					//elBound.adv_Psi(i) += ((elBound.vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
+					//	neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(i);
+					elBound.adv_Psi(i) += ((elBound.vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
+						neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(i) / elBound.weight(i);
+				}
+				else {
+					elBound.adv_Psi(i) += ((elBound.vel(i) - elFluid.adv_vel(neighbs.uid[n])).transpose().matrix() *
+						neighbs.grad_W_vec[n].matrix())(0, 0) * elFluid.X(neighbs.uid[n]);
+				}
 			}
 			else {
-				elBound.adv_Psi(i) += ((elBound.vel(i) - elBound.vel(bid(neighbs.uid[n]))).transpose().matrix() *
-					neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(bid(neighbs.uid[n]));
+				//if (useNumberDensity) {
+				//	//elBound.adv_Psi(i) += ((elBound.vel(i) - elBound.vel(bid(neighbs.uid[n]))).transpose().matrix() *
+				//	//	neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(i);
+				//	elBound.adv_Psi(i) += ((elBound.vel(i) - elBound.vel(bid(neighbs.uid[n]))).transpose().matrix() *
+				//		neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(i) / elBound.weight(i) * elBound.weight(bid(neighbs.uid[n]));
+				//}
+				//else {
+					elBound.adv_Psi(i) += ((elBound.vel(i) - elBound.vel(bid(neighbs.uid[n]))).transpose().matrix() *
+						neighbs.grad_W_vec[n].matrix())(0, 0) * elBound.X(bid(neighbs.uid[n])); ///q3
+				//}
 			}
 		}
 	}
@@ -170,7 +239,7 @@ inline void el_loop_adv_Psi_changeRate(Elfluid& elFluid, Elbound& elBound, Elnei
 	elBound.adv_Psi_changeRate_all() = elBound.adv_Psi_all() * timeStep_1;
 }
 
-inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
+inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elvari& elvari) {
 
 	val_f compressibleState = 1;
 	val_i currentIteration = 0;
@@ -211,7 +280,8 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 			val_i& uid = elBound.uid(i);
 			NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 			for (val_i n = 0; n < neighbs.neighbNum; n++) {
-				if (isFluid(neighbs.uid[n])) {}else {}
+				if (isFluid(neighbs.uid[n])) {}
+				else {}
 			}
 		}
 		elBound.pressure_force_all() *= -timeStep2_1;
@@ -227,14 +297,28 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 		el_loop_adv_Psi(elFluid, elBound, elNeighb);
 
 		compressibleState = (elFluid.adv_Psi_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart;
-		cout << "Iter incom: " << currentIteration << endl;
-		cout << "compressibleState: " << compressibleState << endl;
+		//cout << "Iter incom: " << currentIteration << endl;
+		//cout << "compressibleState: " << compressibleState << endl;
 	}
+	elvari.incompressible_iteration = currentIteration;
 	elFluid.vel_all() = elFluid.adv_vel_all();
 	elFluid.pos_all() += elFluid.vel_all() * timeStep;
+
+	if (elvari.enable_energy_computation) {
+		elvari.potential_energy = 0;
+		elvari.kinetic_energy = 0;
+		elvari.sum_energy = 0;
+		for (val_i i = 0; i < elFluid.numPart; i++) {
+			elvari.potential_energy += elFluid.mass(i) * -elvari.gravity(1, 0) * (elFluid.pos(i)(1, 0) + 4);
+			elvari.kinetic_energy += 0.5 * elFluid.mass(i) * (elFluid.vel(i).transpose().matrix() * elFluid.vel(i).matrix())(0,0);
+		}
+		elvari.potential_energy = elvari.potential_energy / elFluid.numPart;
+		elvari.kinetic_energy = elvari.kinetic_energy / elFluid.numPart;
+		elvari.sum_energy = elvari.potential_energy + elvari.kinetic_energy;
+	}
 }
 
-inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
+inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elvari& elvari) {
 	val_f compressibleState = 1;
 	val_i currentIteration = 0;
 
@@ -279,7 +363,7 @@ inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 			}
 		}
 		elBound.pressure_force_all() *= -timeStep_1;
-		
+
 		elFluid.pressure_force_all() *= timeStep;
 #pragma omp parallel for
 		for (val_i i = 0; i < elFluid.numPart; i++) {
@@ -291,10 +375,10 @@ inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 		el_loop_adv_Psi_changeRate(elFluid, elBound, elNeighb);
 
 		compressibleState = (elFluid.adv_Psi_changeRate_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart * timeStep;
-		cout << "Iter div-f: " << currentIteration << endl;
-		cout << "compressibleState: " << compressibleState << endl;
+		//cout << "Iter div-f: " << currentIteration << endl;
+		//cout << "compressibleState: " << compressibleState << endl;
 	}
-	elFluid.vel_all() = elFluid.adv_vel_all();
+	elvari.divergenceFree_iteration = currentIteration;
 }
 
 inline void el_update_adv_Psi_pj(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
@@ -333,8 +417,14 @@ inline void el_update_adv_Psi_pj(Elfluid& elFluid, Elbound& elBound, Elneighb& e
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elFluid.adv_Psi_pj(i) += elFluid.X(neighbs.uid[n]) * ((elFluid.devi_pj(i) - elFluid.devi_pi(neighbs.uid[n])
-					- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				if (useNumberDensity) {
+					elFluid.adv_Psi_pj(i) += elFluid.X(i) * ((elFluid.devi_pj(i) - elFluid.devi_pi(neighbs.uid[n])
+						- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				}
+				else {
+					elFluid.adv_Psi_pj(i) += elFluid.X(neighbs.uid[n]) * ((elFluid.devi_pj(i) - elFluid.devi_pi(neighbs.uid[n])
+						- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				}
 			}
 			else {
 				elFluid.adv_Psi_pj(i) += elFluid.X(i) * elBound.weight(bid(neighbs.uid[n]))
@@ -349,8 +439,16 @@ inline void el_update_adv_Psi_pj(Elfluid& elFluid, Elbound& elBound, Elneighb& e
 		NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 		for (val_i n = 0; n < neighbs.neighbNum; n++) {
 			if (isFluid(neighbs.uid[n])) {
-				elBound.adv_Psi_pj(i) += elFluid.X(neighbs.uid[n]) * ((-elFluid.devi_pi(neighbs.uid[n])
-					- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				if (useNumberDensity) {
+					//elBound.adv_Psi_pj(i) += elBound.X(i) * ((-elFluid.devi_pi(neighbs.uid[n])
+					//	- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+					elBound.adv_Psi_pj(i) += elBound.X(i) / elBound.weight(i) * ((-elFluid.devi_pi(neighbs.uid[n])
+						- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				}
+				else {
+					elBound.adv_Psi_pj(i) += elFluid.X(neighbs.uid[n]) * ((-elFluid.devi_pi(neighbs.uid[n])
+						- elFluid.devi_pj(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0);
+				}
 			}
 			else {
 
@@ -359,8 +457,8 @@ inline void el_update_adv_Psi_pj(Elfluid& elFluid, Elbound& elBound, Elneighb& e
 		elBound.adv_Psi_pj(i) += timeStep2 * elBound.pressure(i) * elBound.X(i) / pow(elBound.sph_Psi(i), 2) * elBound.alpha_term2(i);
 	}
 }
-	
-inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
+
+inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elvari& elvari) {
 	/*** LOOP 1 ***/
 	// Object: Compute adv_Psi()
 	el_loop_adv_Psi(elFluid, elBound, elNeighb);
@@ -420,7 +518,7 @@ inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elnei
 		}
 		elFluid.pressure_all() = (elFluid.pressure_all().array() < 0).select(0, elFluid.pressure_all());
 		elBound.pressure_all() = (elBound.pressure_all().array() < 0).select(0, elBound.pressure_all());
-		
+
 		/*** LOOP 4 ***/
 		// Object: Compute adv_Psi_pj()
 		elFluid.adv_Psi_pj_all().setZero();
@@ -457,9 +555,24 @@ inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elnei
 		}
 		el_loop_adv_Psi(elFluid, elBound, elNeighb);
 		compressibleState = (elFluid.adv_Psi_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart;
-		cout << "Iter incom: " << currentIteration << endl;
-		cout << "compressibleState: " << compressibleState << endl;
+		//cout << "Iter incom: " << currentIteration << endl;
+		//cout << "compressibleState: " << compressibleState << endl;
 	}
+	elvari.II_incompressible_iteration = currentIteration;
 	elFluid.vel_all() = elFluid.adv_vel_all();
 	elFluid.pos_all() += elFluid.vel_all() * timeStep;
+	//cout << "test: " << elFluid.vel_all() << endl;
+
+	if (elvari.enable_energy_computation) {
+		elvari.potential_energy = 0;
+		elvari.kinetic_energy = 0;
+		elvari.sum_energy = 0;
+		for (val_i i = 0; i < elFluid.numPart; i++) {
+			elvari.potential_energy += elFluid.mass(i) * -elvari.gravity(1, 0) * (elFluid.pos(i)(1, 0) + 4);
+			elvari.kinetic_energy += 0.5 * elFluid.mass(i) * (elFluid.vel(i).transpose().matrix() * elFluid.vel(i).matrix())(0, 0);
+		}
+		elvari.potential_energy = elvari.potential_energy / elFluid.numPart;
+		elvari.kinetic_energy = elvari.kinetic_energy / elFluid.numPart;
+		elvari.sum_energy = elvari.potential_energy + elvari.kinetic_energy;
+	}
 }
