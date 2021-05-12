@@ -167,7 +167,7 @@ inline void el_loop_adv_Psi(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeig
 	}
 	elBound.adv_Psi_all() *= timeStep;
 	elBound.adv_Psi_all() += elBound.sph_Psi_all();
-	elBound.adv_Psi_all() -= elBound.rest_Psi_all();
+	elBound.adv_Psi_all() -= (elBound.rest_Psi_all() * elBound.weight_all());
 	elBound.adv_Psi_all() = (elBound.adv_Psi_all().array() < 0).select(0, elBound.adv_Psi_all());
 }
 

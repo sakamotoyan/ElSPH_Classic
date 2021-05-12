@@ -128,7 +128,7 @@ inline void el_PB_loop_adv_Psi(Elfluid& elFluid, Elbound& elBound, Elneighb& elN
 	}
 	elBound.adv_Psi_all() *= timeStep;
 	elBound.adv_Psi_all() += elBound.sph_Psi_all();
-	elBound.adv_Psi_all() -= elBound.rest_compressionRate_all();
+	elBound.adv_Psi_all() -= (elBound.rest_compressionRate_all() * elBound.weight_all());
 	elBound.adv_Psi_all() = (elBound.adv_Psi_all().array() < 0).select(0, elBound.adv_Psi_all());
 }
 
