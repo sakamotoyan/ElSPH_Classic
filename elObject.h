@@ -88,6 +88,7 @@ private:
     val_i devi_pi_3f[3]={ 1,28,3 };
     val_i devi_pj_3f[3]={ 1,31,3 };
     val_i devi_pi_tmp_3f[3] = { 1,34,3 };
+    val_i phase_5f[3] = { 1,37,5 };
     // rest_compressionRate_1f Psi 0
 
 public:
@@ -291,6 +292,27 @@ public:
     inline FloatBlockRef devi_pi_tmp_all()
     {
         val_i(&ref)[3] = devi_pi_tmp_3f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+
+    inline val_f& phase(val_i i, val_i ph)
+    {
+        val_i(&ref)[3] = phase_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1] + ph, i, 1, 1)(0, 0);
+    }
+    inline FloatBlockRef phase_all(val_i ph)
+    {
+        val_i(&ref)[3] = phase_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1] + ph, 0, 1, numPart);
+    }
+    inline FloatBlockRef phases(val_i i)
+    {
+        val_i(&ref)[3] = phase_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1);
+    }
+    inline FloatBlockRef phases_all()
+    {
+        val_i(&ref)[3] = phase_5f;
         return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
     }
 };
