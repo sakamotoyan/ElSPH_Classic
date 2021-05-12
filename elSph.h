@@ -12,6 +12,10 @@ inline void el_init(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elva
 	elFluid.rest_density_all().setConstant(1000);
 	elBound.rest_density_all().setConstant(1000);
 
+	elFluid.phases_all().setZero();
+
+	cout << "phases:" << elFluid.phases_all() << endl;
+
 	elFluid.vel_all().colwise() = Array3_f(0, -3, 0);
 }
 
@@ -32,7 +36,7 @@ inline void el_updateBoundWeight(Elbound& elBound, Elneighb& elNeighb) {
 			}
 		}
 		elBound.weight(i) *= restVolume;
-		elBound.weight(i) = 0.7 / elBound.weight(i); // Eqn.12 of Pressure Boundaries 
+		elBound.weight(i) = gamma_pb / elBound.weight(i); // Eqn.12 of Pressure Boundaries 
 		
 		elBound.rest_volume(i) = elBound.weight(i) * restVolume;
 	}
@@ -417,8 +421,8 @@ inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elnei
 		}
 #pragma omp parallel for
 		for (val_i i = 0; i < elBound.numPart; i++) {
-			elBound.pressure(i) = (1 - relaxingFactor) * elBound.pressure(i)
-				+ relaxingFactor * pow(elBound.sph_Psi(i), 2) * timeStep2_1 / elBound.X(i)
+			elBound.pressure(i) = (1 - (relaxingFactor / elBound.weight(i))) * elBound.pressure(i)
+				+ (relaxingFactor / elBound.weight(i)) * pow(elBound.sph_Psi(i), 2) * timeStep2_1 / elBound.X(i)
 				/ elBound.alpha(i) * (elBound.adv_Psi(i) + elBound.adv_Psi_pj(i));
 		}
 		elFluid.pressure_all() = (elFluid.pressure_all().array() < 0).select(0, elFluid.pressure_all());

@@ -17,7 +17,7 @@
 
 constexpr val_i basicGridConfig[3] = { 0, 3, 0 }; // coressponding to 3 blocks, each of which has 1, 3, 3 elements respectviely
 constexpr val_i objectGridConfig[3] = { 3, 3, 3 };
-constexpr val_i fluidGridConfig[4] = { 3, 3, 40 };
+constexpr val_i fluidGridConfig[4] = { 3, 3, 45 };
 constexpr val_i boundGridConfig[3] = { 3, 3, 24 };
 constexpr val_i neighbAuxConfig[3] = { 6, 0, 0 };
 
@@ -54,7 +54,6 @@ constexpr val_f smoothRadius4 = smoothRadius3 * smoothRadius;
 constexpr val_f sig3 = M_1_PI / diamPart3;
 constexpr val_f sig3_grad = M_1_PI / diamPart4;
 constexpr val_f restVolume = diamPart3;
-constexpr val_f PB_beta = 0.15 * restVolume;
 
 
 constexpr val_i speedSound = 100;            // speed of sound (simulation time step related)
@@ -71,7 +70,8 @@ constexpr val_i minDivergenceFreeSolverIter = 1;
 constexpr val_f incompressibleThreshold = 1e-4;
 constexpr val_f divergenceFreeThreshold = 1e-3; 
 constexpr val_f incompressibleThreshold_ii = 1e-3;
-constexpr val_f relaxingFactor = 0.3;
+constexpr val_f relaxingFactor = 0.5;
+constexpr val_f gamma_pb = 0.7;
 
 constexpr val_i gridMembers = 70;           // element contains in one neighbour search grid node
 constexpr val_i nonZeros = gridMembers - 1;
