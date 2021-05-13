@@ -69,6 +69,8 @@ public:
 class Elfluid : public ObjectGrid
 {
 private:
+    FloatBlock multiphaseBlock;
+
     val_i mass_1f[3] = {1, 3, 1}; // X
     val_i sph_volume_1f[3] = {1, 4, 1};
     val_i rest_density_1f[3] = {1, 5, 1}; // Psi0
@@ -88,11 +90,22 @@ private:
     val_i devi_pi_3f[3]={ 1,28,3 };
     val_i devi_pj_3f[3]={ 1,31,3 };
     val_i devi_pi_tmp_3f[3] = { 1,34,3 };
-    val_i phase_5f[3] = { 1,37,5 };
+    val_i volumeFraction_5f[3] = { 2,0,5 };
+    val_i drift_vel_15f[3] = { 2,5,15 };
+    val_i color_4f[3] = { 2,20,4 };
+    val_i mt_zeta_1f[3] = { 2,24,1 };
+    val_i intermediate_adv_acce_3f[3] = { 2,25,3 };
+    val_i volumeFractionCache_5f[3] = { 2,28,5 };
+    val_i transaction_1f[3] = { 2,33,1 };
     // rest_compressionRate_1f Psi 0
 
 public:
-    inline Elfluid(val_i num = MaxPartNum_fluid, const val_i* config = fluidGridConfig) : ObjectGrid(num, config) {}
+    inline Elfluid(val_i num = MaxPartNum_fluid, const val_i* config = fluidGridConfig) : ObjectGrid(num, config) {
+        val_i phaseBlockElementNumber = 35;
+        floatBlocks.push_back(&multiphaseBlock);
+        multiphaseBlock.resize(phaseBlockElementNumber, num);
+        multiphaseBlock.dataMat.setZero();
+    }
 
     inline val_f &rest_density(val_i i)
     {
@@ -295,24 +308,88 @@ public:
         return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
     }
 
-    inline val_f& phase(val_i i, val_i ph)
+    inline val_f& volumeFraction(val_i i, val_i ph)
     {
-        val_i(&ref)[3] = phase_5f;
+        val_i(&ref)[3] = volumeFraction_5f;
         return floatBlocks[ref[0]]->dataMat.block(ref[1] + ph, i, 1, 1)(0, 0);
     }
-    inline FloatBlockRef phase_all(val_i ph)
+    inline FloatBlockRef volumeFractions(val_i i)
     {
-        val_i(&ref)[3] = phase_5f;
-        return floatBlocks[ref[0]]->dataMat.block(ref[1] + ph, 0, 1, numPart);
-    }
-    inline FloatBlockRef phases(val_i i)
-    {
-        val_i(&ref)[3] = phase_5f;
+        val_i(&ref)[3] = volumeFraction_5f;
         return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1);
     }
-    inline FloatBlockRef phases_all()
+    inline FloatBlockRef volumeFraction_all()
     {
-        val_i(&ref)[3] = phase_5f;
+        val_i(&ref)[3] = volumeFraction_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+
+    inline FloatBlockRef drift_vel(val_i i, val_i ph)
+    {
+        val_i(&ref)[3] = drift_vel_15f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1] + (ph * 3), i, 3, 1);
+    }
+    inline FloatBlockRef drift_vels(val_i i)
+    {
+        val_i(&ref)[3] = drift_vel_15f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1);
+    }
+    inline FloatBlockRef drift_vel_all()
+    {
+        val_i(&ref)[3] = drift_vel_15f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+
+    inline FloatBlockRef color(val_i i)
+    {
+        val_i(&ref)[3] = color_4f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1);
+    }
+    inline val_f& colorA(val_i i) {return color(i)(3, 0);}
+    
+    inline FloatBlockRef color_all()
+    {
+        val_i(&ref)[3] = color_4f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+    inline val_f& mt_zeta(val_i i)
+    {
+        val_i(&ref)[3] = mt_zeta_1f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1)(0, 0);
+    }
+    inline FloatBlockRef mt_zeta_all()
+    {
+        val_i(&ref)[3] = mt_zeta_1f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+    inline FloatBlockRef intermediate_adv_acce(val_i i)
+    {
+        val_i(&ref)[3] = intermediate_adv_acce_3f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1);
+    }
+    inline FloatBlockRef intermediate_adv_acce_all()
+    {
+        val_i(&ref)[3] = intermediate_adv_acce_3f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+    inline val_f& volumeFractionCache(val_i i, val_i ph)
+    {
+        val_i(&ref)[3] = volumeFractionCache_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1] + ph, i, 1, 1)(0, 0);
+    }
+    inline FloatBlockRef volumeFractionCache_all()
+    {
+        val_i(&ref)[3] = volumeFractionCache_5f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+    inline val_f& transact(val_i i)
+    {
+        val_i(&ref)[3] = transaction_1f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1)(0, 0);
+    }
+    inline FloatBlockRef transact_all()
+    {
+        val_i(&ref)[3] = transaction_1f;
         return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
     }
 };

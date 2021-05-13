@@ -19,6 +19,7 @@ constexpr val_i basicGridConfig[3] = { 0, 3, 0 }; // coressponding to 3 blocks, 
 constexpr val_i objectGridConfig[3] = { 3, 3, 3 };
 constexpr val_i fluidGridConfig[4] = { 3, 3, 45 };
 constexpr val_i boundGridConfig[3] = { 3, 3, 24 };
+constexpr val_i phaseGridConfig[3] = { 0, 0, 24 };
 constexpr val_i neighbAuxConfig[3] = { 6, 0, 0 };
 
 // Simulation domain value
@@ -30,11 +31,13 @@ public:
     Array<val_f, 3, 1> spaceMin;
     Array<val_f, 3, 1> spaceMax;
     val_f currentTime;
+    val_i phaseNumber;
 
     Elvari() {
         gravity = Array < val_f, 3, 1>(0, -9.8, 0);
         spaceMin = Array < val_f, 3, 1>(-8, -8, -8);
         spaceMax = Array < val_f, 3, 1>(8, 12, 8);
+        phaseNumber = 1;
         currentTime = 0;
     }
 };
@@ -69,7 +72,7 @@ constexpr val_i minIncompressibleSolverIter = 2;
 constexpr val_i minDivergenceFreeSolverIter = 1;
 constexpr val_f incompressibleThreshold = 1e-4;
 constexpr val_f divergenceFreeThreshold = 1e-3; 
-constexpr val_f incompressibleThreshold_ii = 1e-3;
+constexpr val_f incompressibleThreshold_ii = 1e-4;
 constexpr val_f relaxingFactor = 0.5;
 constexpr val_f gamma_pb = 0.7;
 
@@ -78,6 +81,13 @@ constexpr val_i nonZeros = gridMembers - 1;
 constexpr val_i colLock = gridMembers - 2;
 constexpr val_i scanRange[2] = { -1,2 };
 constexpr val_f neighbSearchGridSize = smoothRadius; // size of the neighbour search grid
+
+// Multiphase
+#define Multiphase // undefine this to unable volume transaction and diffusion
+constexpr val_i phaseNumber = 3; // <=5
+constexpr val_f transactionCoefficient = 0.1;
+constexpr val_f diffusionCoefficinet = 0;
+
 
 // SPH kernel computation
 

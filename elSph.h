@@ -1,22 +1,44 @@
 #pragma once
 
 #include "elObject.h"
+#include "elMultiphase.h"
 
-inline void el_init(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elvari& elvari) {
+inline void el_init(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, ElPhase& elPhase, Elvari& elvari) {
 
 	elFluid.rest_volume_all().setConstant(restVolume);
 
 	elFluid.rest_compressionRate_all().setOnes();
 	elBound.rest_compressionRate_all().setOnes();
 
-	elFluid.rest_density_all().setConstant(1000);
-	elBound.rest_density_all().setConstant(1000);
 
-	elFluid.phases_all().setZero();
+	// [MT Step 1] define phase number in globalValue.h
+	// [MT Step 2] input phase info {restDensity} {rgba}
+	elPhase.restDensity(0) = 1000;
+	elPhase.restDensity(1) = 10;
+	elPhase.restDensity(2) = 500;
 
-	cout << "phases:" << elFluid.phases_all() << endl;
+	elPhase.rgba(0) << 1, 0, 0, 1;
+	elPhase.rgba(1) << 0, 0, 1, 1;
+	elPhase.rgba(2) << 0, 1, 0, 1;
 
-	elFluid.vel_all().colwise() = Array3_f(0, -3, 0);
+	// [MT Step 3] allocate volume fraction for each particle
+	elFluid.volumeFraction_all().setZero();
+	elFluid.volumeFraction_all().row(2) = 1;
+
+	elFluid.volumeFraction(0, 0) = 0.5;
+	elFluid.volumeFraction(0, 1) = 0.5;
+	elFluid.volumeFraction(0, 2) = 0;
+
+	elFluid.volumeFraction(1, 0) = 0.5;
+	elFluid.volumeFraction(1, 1) = 0.5;
+	elFluid.volumeFraction(1, 2) = 0;
+	// [MT Step 4] init color
+	el_mixColor(elFluid, elPhase);
+
+	/*** To enable volume fraction happen define Multiphase in globalValue.h***/
+
+
+	elFluid.vel_all().colwise() = Array3_f(0, -10, 0);
 }
 
 inline void el_updateBoundWeight(Elbound& elBound, Elneighb& elNeighb) {
@@ -47,10 +69,18 @@ inline void el_neighbourSearch(Elfluid& elFluid, Elbound& elBound, Elneighb& elN
 	elNeighb.updateRelations(elFluid, elBound);
 }
 
-inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
+inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, ElPhase& elPhase) {
 
 	/*** LOOP 1 ***/
-	// Object: Calculate mass() from {rest_density(), rest_volume()}
+	// Object: Calculate rest_density() mass() from elPhase, rest_volume
+	elFluid.rest_density_all().setZero();
+#pragma omp parallel for
+	for (val_i i = 0; i < elFluid.numPart; i++) {
+		for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+			elFluid.rest_density(i) += elFluid.volumeFraction(i, ph) * elPhase.restDensity(ph);
+		}
+	}
+
 	elFluid.mass_all() = elFluid.rest_volume_all().array() * elFluid.rest_density_all().array();
 	elBound.mass_all() = elBound.rest_volume_all().array() * elBound.rest_density_all().array();
 
@@ -167,7 +197,7 @@ inline void el_loop_adv_Psi(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeig
 	}
 	elBound.adv_Psi_all() *= timeStep;
 	elBound.adv_Psi_all() += elBound.sph_Psi_all();
-	elBound.adv_Psi_all() -= (elBound.rest_Psi_all() * elBound.weight_all());
+	elBound.adv_Psi_all() -= elBound.rest_Psi_all();
 	elBound.adv_Psi_all() = (elBound.adv_Psi_all().array() < 0).select(0, elBound.adv_Psi_all());
 }
 
@@ -177,7 +207,7 @@ inline void el_loop_adv_Psi_changeRate(Elfluid& elFluid, Elbound& elBound, Elnei
 	elBound.adv_Psi_changeRate_all() = elBound.adv_Psi_all() * timeStep_1;
 }
 
-inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb) {
+inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, ElPhase& elPhase, Elvari& elvari) {
 
 	val_f compressibleState = 1;
 	val_i currentIteration = 0;
@@ -237,6 +267,14 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 		cout << "Iter incom: " << currentIteration << endl;
 		cout << "compressibleState: " << compressibleState << endl;
 	}
+
+#ifdef Multiphase
+	elFluid.adv_acce_all() += ((elFluid.adv_vel_all() - elFluid.vel_all()) * timeStep_1); // Multiphase on
+	cout << "Multiphase on" << endl;
+	el_multiphaseSolver(elFluid, elNeighb, elPhase, elvari);
+	el_mixColor(elFluid, elPhase);
+#endif 
+
 	elFluid.vel_all() = elFluid.adv_vel_all();
 	elFluid.pos_all() += elFluid.vel_all() * timeStep;
 }

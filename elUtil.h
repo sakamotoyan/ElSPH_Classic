@@ -20,7 +20,7 @@ static omp_lock_t lock;
 // Universal parameter type 
 // val_i
 typedef int val_i;
-typedef float val_f;
+typedef double val_f;
 
 typedef Array<val_i, 3, 1> Array3_i;
 typedef Array<val_f, 3, 1> Array3_f;
