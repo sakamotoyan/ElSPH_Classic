@@ -140,3 +140,59 @@ inline void el_multiphaseSolver(Elfluid& elFluid, Elneighb& elNeighb, ElPhase& e
     // Compute volumeFraction change
     driftToVolume(elFluid, elNeighb, elPhase);
 }
+
+inline void el_multiphaseSolver_SCA21(Elfluid& elFluid, Elneighb& elNeighb, ElPhase& elPhase, Elvari& elvari) {
+#pragma omp parallel for
+    for (val_i i = 0; i < elFluid.numPart; i++) {
+        for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+            elFluid.drift_vel(i, ph) = timeStep
+                * ((elPhase.restDensity(ph) - elFluid.rest_density(i)) / elFluid.rest_density(i))
+                * (elvari.gravity - elFluid.adv_acce(i));
+        }
+    }
+
+    bool hasNegative = true;
+    elFluid.transact_all().setOnes();
+    while (hasNegative) {
+        hasNegative = false;
+        elFluid.volumeFractionCache_all() = elFluid.volumeFraction_all();
+#pragma omp parallel for
+        for (val_i i = 0; i < elFluid.numPart; i++) {
+            if (elFluid.transact(i) < 0)continue;
+            for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+                val_i& uid = elFluid.uid(i);
+                NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
+                val_f tmpTran = 0;
+                val_f tmpDiff = 0;
+                for (val_i n = 0; n < neighbs.neighbNum; n++) {
+                    if (isFluid(neighbs.uid[n])) {
+                        if (elFluid.transact(neighbs.uid[n]) > 0) {
+                            tmpTran += -elFluid.sph_volume(neighbs.uid[n]) * ((elFluid.volumeFraction(i, ph) * elFluid.drift_vel(i, ph)
+                                + elFluid.volumeFraction(neighbs.uid[n], ph) * elFluid.drift_vel(neighbs.uid[n], ph)).transpose().matrix()
+                                * neighbs.grad_W_vec[n].matrix())(0, 0);
+                            tmpDiff += elFluid.sph_volume(neighbs.uid[n]) * (elFluid.volumeFraction(i, ph) - elFluid.volumeFraction(neighbs.uid[n], ph))
+                                * ((elFluid.pos(i) - elFluid.pos(neighbs.uid[n])).transpose().matrix() * neighbs.grad_W_vec[n].matrix())(0, 0)
+                                / (pow(neighbs.dis[n], 2) + 10e-6);
+                            tmpTran *= transactionCoefficient;
+                            tmpDiff *= diffusionCoefficinet;
+                            tmpTran = timeStep * (tmpTran + tmpDiff);
+                            elFluid.volumeFractionCache(i, ph) += tmpTran;
+                        }
+                    }
+                }
+            }
+        }
+
+#pragma omp parallel for
+        for (val_i i = 0; i < elFluid.numPart; i++) {
+            for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+                if (elFluid.volumeFractionCache(i, ph) < 0) {
+                    hasNegative = true;
+                    elFluid.transact(i) = -1;
+                }
+            }
+        }
+    }
+
+    elFluid.volumeFraction_all() = elFluid.volumeFractionCache_all();
+}
