@@ -31,13 +31,11 @@ public:
     Array<val_f, 3, 1> spaceMin;
     Array<val_f, 3, 1> spaceMax;
     val_f currentTime;
-    val_i phaseNumber;
 
     Elvari() {
         gravity = Array < val_f, 3, 1>(0, -9.8, 0);
         spaceMin = Array < val_f, 3, 1>(-8, -8, -8);
         spaceMax = Array < val_f, 3, 1>(8, 12, 8);
-        phaseNumber = 1;
         currentTime = 0;
     }
 };
@@ -84,8 +82,9 @@ constexpr val_f neighbSearchGridSize = smoothRadius; // size of the neighbour se
 
 // Multiphase
 #define Multiphase // undefine this to unable volume transaction and diffusion
+#define MultiphaseSCA21 
 constexpr val_i phaseNumber = 3; // <=5
-constexpr val_f transactionCoefficient = 0.1;
+constexpr val_f transactionCoefficient = 1;
 constexpr val_f diffusionCoefficinet = 0;
 
 

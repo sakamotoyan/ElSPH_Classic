@@ -97,11 +97,12 @@ private:
     val_i intermediate_adv_acce_3f[3] = { 2,25,3 };
     val_i volumeFractionCache_5f[3] = { 2,28,5 };
     val_i transaction_1f[3] = { 2,33,1 };
+    val_i mt_gamma_1f[3] = { 2,34,1 };
     // rest_compressionRate_1f Psi 0
 
 public:
     inline Elfluid(val_i num = MaxPartNum_fluid, const val_i* config = fluidGridConfig) : ObjectGrid(num, config) {
-        val_i phaseBlockElementNumber = 35;
+        val_i phaseBlockElementNumber = 37;
         floatBlocks.push_back(&multiphaseBlock);
         multiphaseBlock.resize(phaseBlockElementNumber, num);
         multiphaseBlock.dataMat.setZero();
@@ -390,6 +391,16 @@ public:
     inline FloatBlockRef transact_all()
     {
         val_i(&ref)[3] = transaction_1f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
+    }
+    inline val_f& mt_gamma(val_i i)
+    {
+        val_i(&ref)[3] = mt_gamma_1f;
+        return floatBlocks[ref[0]]->dataMat.block(ref[1], i, ref[2], 1)(0, 0);
+    }
+    inline FloatBlockRef mt_gamma_all()
+    {
+        val_i(&ref)[3] = mt_gamma_1f;
         return floatBlocks[ref[0]]->dataMat.block(ref[1], 0, ref[2], numPart);
     }
 };

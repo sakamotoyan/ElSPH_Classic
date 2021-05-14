@@ -80,9 +80,18 @@ inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb&
 			elFluid.rest_density(i) += elFluid.volumeFraction(i, ph) * elPhase.restDensity(ph);
 		}
 	}
-
 	elFluid.mass_all() = elFluid.rest_volume_all().array() * elFluid.rest_density_all().array();
 	elBound.mass_all() = elBound.rest_volume_all().array() * elBound.rest_density_all().array();
+#ifdef MultiphaseSCA21
+	elFluid.mt_gamma_all().setZero();
+#pragma omp parallel for
+	for (val_i i = 0; i < elFluid.numPart; i++) {
+		for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+			if (elFluid.volumeFraction(i, ph) < 10e-6) continue;
+			elFluid.mt_gamma(i) += pow(elFluid.volumeFraction(i, ph), 2) / (elFluid.volumeFraction(i, ph) * elPhase.restDensity(ph) / elFluid.rest_density(i));
+		}
+	}
+#endif // MultiphaseSCA21
 
 	/*** LOOP 2 ***/
 	// Object: Calculate Psi(), sph_volume(), alpha_term1(), alpha_term2()
@@ -130,7 +139,7 @@ inline void el_prepareSphAttribute(Elfluid& elFluid, Elbound& elBound, Elneighb&
 	}
 }
 
-inline void el_advection(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, Elvari& elvari) {
+inline void el_advection(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb, ElPhase& elPhase, Elvari& elvari) {
 
 	// Object: Compute vel_adv()
 	elFluid.adv_vel_all() = elFluid.vel_all();
@@ -146,6 +155,13 @@ inline void el_advection(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb,
 				xij = elFluid.pos(i) - elFluid.pos(neighbs.uid[n]);
 				elFluid.adv_acce(i) += viscosity_nu * laplacian_W(Aij, xij, neighbs.dis[n],
 					neighbs.grad_W_vec[n], elFluid.sph_volume(neighbs.uid[n]));
+#ifdef MultiphaseSCA21
+				for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+					elFluid.adv_acce(i) += elFluid.drift_vel(i, ph) * timeStep_1 / elPhase.restDensity(ph) 
+						* elFluid.rest_density(i) * elFluid.volumeFraction(i,ph);
+				}
+#endif // MultiphaseSCA21
+
 			}
 			else {
 				Aij = elFluid.vel(i) - elBound.vel(bid(neighbs.uid[n]));
@@ -270,8 +286,16 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 
 #ifdef Multiphase
 	elFluid.adv_acce_all() += ((elFluid.adv_vel_all() - elFluid.vel_all()) * timeStep_1); // Multiphase on
-	cout << "Multiphase on" << endl;
+#ifdef MultiphaseSCA21
+	el_multiphaseSolver_SCA21(elFluid, elNeighb, elPhase, elvari);
+#pragma omp parallel for
+	for (val_i i = 0; i < elFluid.numPart; i++) {
+		elFluid.adv_vel(i) = (elFluid.adv_vel(i) - elFluid.vel(i)) * elFluid.mt_gamma(i) + elFluid.vel(i);
+	}
+#endif
+#ifndef MultiphaseSCA21
 	el_multiphaseSolver(elFluid, elNeighb, elPhase, elvari);
+#endif
 	el_mixColor(elFluid, elPhase);
 #endif 
 

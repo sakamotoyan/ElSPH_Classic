@@ -7,6 +7,7 @@ void test()
 	Elfluid elFluid(MaxPartNum_fluid, fluidGridConfig);
 	Elbound elBound(MaxPartNum_bound, boundGridConfig);
 	Elneighb elNeighb;
+	ElPhase elPhase;
 	Elvari elvari;
 
 	FloatBlock refPosBlock_fluid, refPosBlock_bound;
@@ -41,18 +42,23 @@ void test()
 	elNeighb.updateRelations(elFluid, elBound);
 
 	// [step 4] SPH step
-	el_init(elFluid, elBound, elNeighb, elvari);
+	el_init(elFluid, elBound, elNeighb, elPhase, elvari);
 	el_updateBoundWeight(elBound, elNeighb);
-	el_prepareSphAttribute(elFluid, elBound, elNeighb);
+	el_prepareSphAttribute(elFluid, elBound, elNeighb, elPhase);
+	el_advection(elFluid, elBound, elNeighb, elPhase, elvari);
+	el_incompressibleSolver(elFluid, elBound, elNeighb, elPhase, elvari);
 
 
-	/*cout << "before: " << endl << elFluid.adv_vel_all() << endl;*/
-	el_advection(elFluid, elBound, elNeighb, elvari);
-	//cout << "before: " << endl << elFluid.adv_vel_all() << endl;
-	//el_incompressibleSolver(elFluid, elBound, elNeighb);
+	cout << "pos:" << elFluid.pos(0).transpose() << endl;
+	cout << "pos:" << elFluid.pos(1).transpose() << endl;
+	cout << "after volume fraction:" << endl << elFluid.volumeFractions(0) << endl;
+	cout << "after volume fraction:" << endl << elFluid.volumeFractions(1) << endl;
+	cout << "after volume fraction:" << endl << elFluid.volumeFractions(0).sum() << endl;
+	cout << "after volume fraction:" << endl << elFluid.volumeFractions(1).sum() << endl;
+	cout << "after volume fraction:" << endl << elFluid.volumeFraction_all().sum() << endl;
 	//el_divergenceFreeSolver(elFluid, elBound, elNeighb);
-	el_incompressibleSolver_II(elFluid, elBound, elNeighb);
-	PAUSE;
+	//el_incompressibleSolver_II(elFluid, elBound, elNeighb);
+	//PAUSE;
 	
 	//cout << "adv_Psi_all: " << endl << elBound.adv_Psi_all() << endl; 
 

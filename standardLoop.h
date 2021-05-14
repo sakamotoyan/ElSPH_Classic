@@ -31,7 +31,7 @@
 			NeighbRelation& neighbs = elNeighb.neighbRelations[uid];
 			for (val_i n = 0; n < neighbs.neighbNum; n++) {
 				if (isFluid(neighbs.uid[n])) {
-					for (val_i ph = 0; ph < elphase.phaseNum; ph++) {
+					for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
 
 					}
 				}
