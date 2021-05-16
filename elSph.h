@@ -253,7 +253,7 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 				}
 				else {
 					elFluid.pressure_force(i) += neighbs.grad_W_vec[n]
-						* ((elFluid.adv_Psi(i) * elBound.X(bid(neighbs.uid[n])) / elFluid.alpha(i))
+						* ((elFluid.adv_Psi(i) * elFluid.X(i) * elBound.weight(bid(neighbs.uid[n])) / elFluid.alpha(i))
 							+ (elBound.adv_Psi(bid(neighbs.uid[n])) * elFluid.X(i) / elBound.alpha(bid(neighbs.uid[n]))));
 				}
 			}
@@ -332,7 +332,7 @@ inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 				}
 				else {
 					elFluid.pressure_force(i) += neighbs.grad_W_vec[n]
-						* ((elFluid.adv_Psi_changeRate(i) * elBound.X(bid(neighbs.uid[n])) / elFluid.alpha(i))
+						* ((elFluid.adv_Psi_changeRate(i) * elFluid.X(i) * elBound.weight(bid(neighbs.uid[n])) / elFluid.alpha(i))
 							+ (elBound.adv_Psi_changeRate(bid(neighbs.uid[n])) * elFluid.X(i) / elBound.alpha(bid(neighbs.uid[n]))));
 				}
 			}
@@ -388,7 +388,7 @@ inline void el_update_adv_Psi_pj(Elfluid& elFluid, Elbound& elBound, Elneighb& e
 					/ pow(elFluid.sph_Psi(neighbs.uid[n]), 2) * neighbs.grad_W_vec[n];
 			}
 			else {
-				elFluid.devi_pj(i) += elBound.X(bid(neighbs.uid[n])) * elBound.pressure(bid(neighbs.uid[n]))
+				elFluid.devi_pj(i) += elFluid.X(i) * elBound.weight(bid(neighbs.uid[n])) * elBound.pressure(bid(neighbs.uid[n]))
 					/ pow(elBound.sph_Psi(bid(neighbs.uid[n])), 2) * neighbs.grad_W_vec[n];
 			}
 			elFluid.devi_pj(i) *= elFluid.X(i) / elFluid.mass(i);
@@ -454,7 +454,7 @@ inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elnei
 				elFluid.devi_pi_tmp(i) += elFluid.X(neighbs.uid[n]) * neighbs.grad_W_vec[n];
 			}
 			else {
-				elFluid.devi_pi_tmp(i) += elBound.X(bid(neighbs.uid[n])) * neighbs.grad_W_vec[n];
+				elFluid.devi_pi_tmp(i) += elFluid.X(i) * elBound.weight(bid(neighbs.uid[n])) * neighbs.grad_W_vec[n];
 			}
 		}
 	}
@@ -511,7 +511,7 @@ inline void el_incompressibleSolver_II(Elfluid& elFluid, Elbound& elBound, Elnei
 						* neighbs.grad_W_vec[n];
 				}
 				else {
-					elFluid.pressure_force(i) += -elFluid.X(i) * elBound.X(bid(neighbs.uid[n])) *
+					elFluid.pressure_force(i) += -elFluid.X(i) * elFluid.X(i) * elBound.weight(bid(neighbs.uid[n])) *
 						(elFluid.pressure(i) / pow(elFluid.sph_Psi(i), 2) + elBound.pressure(bid(neighbs.uid[n])) / pow(elBound.sph_Psi(bid(neighbs.uid[n])), 2))
 						* neighbs.grad_W_vec[n];
 				}
