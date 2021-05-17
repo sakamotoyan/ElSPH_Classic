@@ -155,13 +155,6 @@ inline void el_advection(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb,
 				xij = elFluid.pos(i) - elFluid.pos(neighbs.uid[n]);
 				elFluid.adv_acce(i) += viscosity_nu * laplacian_W(Aij, xij, neighbs.dis[n],
 					neighbs.grad_W_vec[n], elFluid.sph_volume(neighbs.uid[n]));
-#ifdef MultiphaseSCA21
-				for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
-					elFluid.adv_acce(i) += elFluid.drift_vel(i, ph) * timeStep_1 / elPhase.restDensity(ph) 
-						* elFluid.rest_density(i) * elFluid.volumeFraction(i,ph);
-				}
-#endif // MultiphaseSCA21
-
 			}
 			else {
 				Aij = elFluid.vel(i) - elBound.vel(bid(neighbs.uid[n]));
@@ -170,6 +163,12 @@ inline void el_advection(Elfluid& elFluid, Elbound& elBound, Elneighb& elNeighb,
 					neighbs.grad_W_vec[n], elBound.sph_volume(bid(neighbs.uid[n])));
 			}
 		}
+#ifdef MultiphaseSCA21
+		for (val_i ph = 0; ph < elPhase.phaseNum; ph++) {
+			elFluid.adv_acce(i) += elFluid.drift_vel(i, ph) * timeStep_1 / elPhase.restDensity(ph)
+				* elFluid.rest_density(i) * elFluid.volumeFraction(i, ph);
+		}
+#endif // MultiphaseSCA21
 		elFluid.adv_vel(i) += elFluid.adv_acce(i) * timeStep;
 	}
 }
@@ -231,6 +230,7 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 	/*** LOOP 1 ***/
 	// Object: Compute adv_Psi()
 	el_loop_adv_Psi(elFluid, elBound, elNeighb);
+	cout << "before el_incompressibleSolver compressibleState: " << (elFluid.adv_Psi_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart << endl;
 
 	while (compressibleState > incompressibleThreshold || currentIteration < minIncompressibleSolverIter)
 	{
@@ -290,7 +290,7 @@ inline void el_incompressibleSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 	el_multiphaseSolver_SCA21(elFluid, elNeighb, elPhase, elvari);
 #pragma omp parallel for
 	for (val_i i = 0; i < elFluid.numPart; i++) {
-		elFluid.adv_vel(i) = (elFluid.adv_vel(i) - elFluid.vel(i)) * elFluid.mt_gamma(i) + elFluid.vel(i);
+		elFluid.adv_vel(i) = (elFluid.adv_vel(i) - elFluid.vel(i)) + elFluid.vel(i); // ´ý¾«¼ò
 	}
 #endif
 #ifndef MultiphaseSCA21
@@ -359,7 +359,7 @@ inline void el_divergenceFreeSolver(Elfluid& elFluid, Elbound& elBound, Elneighb
 		// Object: Compute adv_Psi_changeRate()
 		el_loop_adv_Psi_changeRate(elFluid, elBound, elNeighb);
 
-		compressibleState = (elFluid.adv_Psi_changeRate_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart * timeStep;
+		compressibleState = (elFluid.adv_Psi_all() / elFluid.rest_Psi_all()).sum() / elFluid.numPart;;
 		cout << "Iter div-f: " << currentIteration << endl;
 		cout << "compressibleState: " << compressibleState << endl;
 	}
